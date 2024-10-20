@@ -1,56 +1,63 @@
 import time
 import cv2
-from edgetpu.detection.engine import DetectionEngine
+import numpy as np
+from pycoral.utils import edgetpu
+from pycoral.adapters import common
+from pycoral.adapters import detect
 from PIL import Image
 
-# Function to draw bounding boxes on the frame
 def draw_boxes(frame, box, label, score):
-    cv2.rectangle(frame, (int(box[0]), int(box[1])), (int(box[2]), int(box[3])), (0, 255, 0), 2)
-    cv2.putText(frame, f'{label} {score:.2f}', (int(box[0]), int(box[1]) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+    ymin, xmin, ymax, xmax = box
+    cv2.rectangle(frame, (int(xmin), int(ymin)), (int(xmax), int(ymax)), (0, 255, 0), 2)
+    cv2.putText(frame, f'{label} {score:.2f}', (int(xmin), int(ymin) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
 
-# Main function
 def main():
-    model_path = 'hand_model_edgetpu.tflite'  # Hardcoded model path
+    model_path = 'hand_model_edgetpu.tflite'
 
-    # Initialize engine
-    engine = DetectionEngine(model_path)
+    # Initialize the TF Lite interpreter
+    interpreter = edgetpu.make_interpreter(model_path)
+    interpreter.allocate_tensors()
 
-    # Initialize camera
+    # Get model details
+    input_details = interpreter.get_input_details()
+    output_details = interpreter.get_output_details()
+    
+    height = input_details[0]['shape'][1]
+    width = input_details[0]['shape'][2]
+    
+    print(f"Model input size: {width}x{height}")
+
     cap = cv2.VideoCapture(0)
-
-    # Define expected input size (replace with your model's expected size)
-    input_size = (300, 300)  # Example: 300x300 for some models
 
     while True:
         ret, frame = cap.read()
         if not ret:
             break
 
-        # Convert frame to RGB
+        # Resize and preprocess the frame
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-        # Resize the image to the expected input size
-        resized_frame = cv2.resize(rgb_frame, input_size)
-
-        # Convert NumPy array to PIL Image
-        pil_image = Image.fromarray(resized_frame)
+        resized_frame = cv2.resize(rgb_frame, (width, height))
+        input_tensor = np.expand_dims(resized_frame, axis=0)
 
         # Run inference
         start_time = time.time()
-        try:
-            # Use the updated method name
-            ans = engine.detect_with_image(pil_image, threshold=0.05, keep_aspect_ratio=False, relative_coord=True)
-        except Exception as e:
-            print(f'Error during detection: {e}')
-            continue  # Skip this frame if there's an error
-
+        common.set_input(interpreter, input_tensor)
+        interpreter.invoke()
+        detections = detect.get_objects(interpreter, score_threshold=0.3)
         end_time = time.time()
 
         # Draw bounding boxes
-        for obj in ans:
-            box = obj.bounding_box.flatten().tolist()
-            box = [box[0] * frame.shape[1], box[1] * frame.shape[0], box[2] * frame.shape[1], box[3] * frame.shape[0]]
-            draw_boxes(frame, box, 'Hand', obj.score)
+        for obj in detections:
+            bbox = obj.bbox
+            # Scale bounding box to original frame size
+            scale_x, scale_y = frame.shape[1] / width, frame.shape[0] / height
+            bbox_scaled = [
+                bbox.ymin * scale_y,
+                bbox.xmin * scale_x,
+                bbox.ymax * scale_y,
+                bbox.xmax * scale_x
+            ]
+            draw_boxes(frame, bbox_scaled, obj.id, obj.score)
 
         # Display frame
         cv2.imshow('Hand Detection', frame)
