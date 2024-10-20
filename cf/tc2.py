@@ -38,7 +38,8 @@ def main():
         # Run inference
         start_time = time.time()
         try:
-            ans = engine.DetectWithImage(pil_image, threshold=0.05, keep_aspect_ratio=False, relative_coord=True)
+            # Use the updated method name
+            ans = engine.detect_with_image(pil_image, threshold=0.05, keep_aspect_ratio=False, relative_coord=True)
         except Exception as e:
             print(f'Error during detection: {e}')
             continue  # Skip this frame if there's an error
