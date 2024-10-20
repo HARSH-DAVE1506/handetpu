@@ -1,7 +1,7 @@
 import time
 import cv2
 from edgetpu.detection.engine import DetectionEngine
-from PIL import Image  # Import the PIL Image module
+from PIL import Image
 
 # Function to draw bounding boxes on the frame
 def draw_boxes(frame, box, label, score):
@@ -18,6 +18,9 @@ def main():
     # Initialize camera
     cap = cv2.VideoCapture(0)
 
+    # Define expected input size (replace with your model's expected size)
+    input_size = (300, 300)  # Example: 300x300 for some models
+
     while True:
         ret, frame = cap.read()
         if not ret:
@@ -26,8 +29,11 @@ def main():
         # Convert frame to RGB
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
+        # Resize the image to the expected input size
+        resized_frame = cv2.resize(rgb_frame, input_size)
+
         # Convert NumPy array to PIL Image
-        pil_image = Image.fromarray(rgb_frame)
+        pil_image = Image.fromarray(resized_frame)
 
         # Run inference
         start_time = time.time()
